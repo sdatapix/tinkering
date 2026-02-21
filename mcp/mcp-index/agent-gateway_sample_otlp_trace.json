@@ -1,0 +1,135 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          { "key": "service.name",         "value": { "stringValue": "agentgateway" } },
+          { "key": "service.version",      "value": { "stringValue": "0.12.0" } },
+          { "key": "deployment.environment","value": { "stringValue": "production" } },
+          { "key": "host.name",            "value": { "stringValue": "gateway-node-1" } }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": { "name": "agentgateway", "version": "0.12.0" },
+          "spans": [
+
+            {
+              "traceId":      "286cb6c44380a45e1f77f29ce4d146fd",
+              "spanId":       "f7f30629c29d9089",
+              "parentSpanId": "",
+              "name": "initialize",
+              "kind": 2,
+              "startTimeUnixNano": "1740067200000000000",
+              "endTimeUnixNano":   "1740067200045000000",
+              "attributes": [
+                { "key": "protocol",                         "value": { "stringValue": "mcp" } },
+                { "key": "mcp.method",                       "value": { "stringValue": "initialize" } },
+                { "key": "mcp.session_id",                   "value": { "stringValue": "6b497ee9-3710-428a-96d2-31ebeab73dcd" } },
+
+                { "key": "http.request.method",              "value": { "stringValue": "POST" } },
+                { "key": "http.route",                       "value": { "stringValue": "/mcp" } },
+                { "key": "url.full",                         "value": { "stringValue": "http://gateway-node-1:3000/mcp" } },
+                { "key": "url.path",                         "value": { "stringValue": "/mcp" } },
+                { "key": "url.scheme",                       "value": { "stringValue": "http" } },
+                { "key": "http.response.status_code",        "value": { "intValue": "200" } },
+                { "key": "http.request.body.size",           "value": { "intValue": "312" } },
+                { "key": "http.response.body.size",          "value": { "intValue": "198" } },
+                { "key": "http.request.header.content-type", "value": { "arrayValue": { "values": [{ "stringValue": "application/json" }] } } },
+                { "key": "http.request.header.accept",       "value": { "arrayValue": { "values": [{ "stringValue": "application/json, text/event-stream" }] } } },
+                { "key": "http.request.header.mcp-session-id","value": { "arrayValue": { "values": [{ "stringValue": "" }] } } },
+                { "key": "http.response.header.mcp-session-id","value": { "arrayValue": { "values": [{ "stringValue": "6b497ee9-3710-428a-96d2-31ebeab73dcd" }] } } },
+                { "key": "http.response.header.content-type","value": { "arrayValue": { "values": [{ "stringValue": "application/json" }] } } },
+                { "key": "network.protocol.version",         "value": { "stringValue": "1.1" } },
+                { "key": "network.peer.address",             "value": { "stringValue": "192.168.1.42" } },
+                { "key": "network.peer.port",                "value": { "intValue": "52341" } },
+                { "key": "server.address",                   "value": { "stringValue": "gateway-node-1" } },
+                { "key": "server.port",                      "value": { "intValue": "3000" } },
+                { "key": "user_agent.original",              "value": { "stringValue": "mcp-client/1.0 (claude-desktop)" } },
+
+                { "key": "environment",                      "value": { "stringValue": "production" } }
+              ],
+              "status": { "code": 1 }
+            },
+
+            {
+              "traceId":      "286cb6c44380a45e1f77f29ce4d146fd",
+              "spanId":       "aabbccddeeff0011",
+              "parentSpanId": "f7f30629c29d9089",
+              "name": "list_tools",
+              "kind": 2,
+              "startTimeUnixNano": "1740067200050000000",
+              "endTimeUnixNano":   "1740067200058000000",
+              "attributes": [
+                { "key": "protocol",                          "value": { "stringValue": "mcp" } },
+                { "key": "mcp.method",                        "value": { "stringValue": "tools/list" } },
+                { "key": "mcp.server",                        "value": { "stringValue": "everything" } },
+                { "key": "mcp.session_id",                    "value": { "stringValue": "6b497ee9-3710-428a-96d2-31ebeab73dcd" } },
+
+                { "key": "http.request.method",               "value": { "stringValue": "POST" } },
+                { "key": "http.route",                        "value": { "stringValue": "/mcp" } },
+                { "key": "url.path",                          "value": { "stringValue": "/mcp" } },
+                { "key": "url.scheme",                        "value": { "stringValue": "http" } },
+                { "key": "http.response.status_code",         "value": { "intValue": "200" } },
+                { "key": "http.request.body.size",            "value": { "intValue": "68" } },
+                { "key": "http.response.body.size",           "value": { "intValue": "1402" } },
+                { "key": "http.request.header.content-type",  "value": { "arrayValue": { "values": [{ "stringValue": "application/json" }] } } },
+                { "key": "http.request.header.mcp-session-id","value": { "arrayValue": { "values": [{ "stringValue": "6b497ee9-3710-428a-96d2-31ebeab73dcd" }] } } },
+                { "key": "network.protocol.version",          "value": { "stringValue": "1.1" } },
+                { "key": "network.peer.address",              "value": { "stringValue": "192.168.1.42" } },
+                { "key": "server.address",                    "value": { "stringValue": "gateway-node-1" } },
+                { "key": "server.port",                       "value": { "intValue": "3000" } },
+
+                { "key": "environment",                       "value": { "stringValue": "production" } }
+              ],
+              "status": { "code": 1 }
+            },
+
+            {
+              "traceId":      "286cb6c44380a45e1f77f29ce4d146fd",
+              "spanId":       "ccddee1122334455",
+              "parentSpanId": "aabbccddeeff0011",
+              "name": "call_tool",
+              "kind": 2,
+              "startTimeUnixNano": "1740067205000000000",
+              "endTimeUnixNano":   "1740067205042000000",
+              "attributes": [
+                { "key": "protocol",                           "value": { "stringValue": "mcp" } },
+                { "key": "mcp.method",                         "value": { "stringValue": "tools/call" } },
+                { "key": "mcp.tool",                           "value": { "stringValue": "echo" } },
+                { "key": "mcp.server",                         "value": { "stringValue": "everything" } },
+                { "key": "mcp.session_id",                     "value": { "stringValue": "6b497ee9-3710-428a-96d2-31ebeab73dcd" } },
+
+                { "key": "http.request.method",                "value": { "stringValue": "POST" } },
+                { "key": "http.route",                         "value": { "stringValue": "/mcp" } },
+                { "key": "url.full",                           "value": { "stringValue": "http://gateway-node-1:3000/mcp" } },
+                { "key": "url.path",                           "value": { "stringValue": "/mcp" } },
+                { "key": "url.scheme",                         "value": { "stringValue": "http" } },
+                { "key": "http.response.status_code",          "value": { "intValue": "200" } },
+                { "key": "http.request.body.size",             "value": { "intValue": "128" } },
+                { "key": "http.response.body.size",            "value": { "intValue": "96" } },
+                { "key": "http.request.header.content-type",   "value": { "arrayValue": { "values": [{ "stringValue": "application/json" }] } } },
+                { "key": "http.request.header.accept",         "value": { "arrayValue": { "values": [{ "stringValue": "application/json, text/event-stream" }] } } },
+                { "key": "http.request.header.mcp-session-id", "value": { "arrayValue": { "values": [{ "stringValue": "6b497ee9-3710-428a-96d2-31ebeab73dcd" }] } } },
+                { "key": "http.request.header.authorization",  "value": { "arrayValue": { "values": [{ "stringValue": "Bearer eyJhbGci..." }] } } },
+                { "key": "http.response.header.content-type",  "value": { "arrayValue": { "values": [{ "stringValue": "application/json" }] } } },
+                { "key": "network.protocol.version",           "value": { "stringValue": "1.1" } },
+                { "key": "network.peer.address",               "value": { "stringValue": "192.168.1.42" } },
+                { "key": "network.peer.port",                  "value": { "intValue": "52341" } },
+                { "key": "server.address",                     "value": { "stringValue": "gateway-node-1" } },
+                { "key": "server.port",                        "value": { "intValue": "3000" } },
+                { "key": "user_agent.original",                "value": { "stringValue": "mcp-client/1.0 (claude-desktop)" } },
+                { "key": "client.address",                     "value": { "stringValue": "192.168.1.42" } },
+
+                { "key": "environment",                        "value": { "stringValue": "production" } },
+                { "key": "route",                              "value": { "stringValue": "/mcp" } }
+              ],
+              "status": { "code": 1 }
+            }
+
+          ]
+        }
+      ]
+    }
+  ]
+}
