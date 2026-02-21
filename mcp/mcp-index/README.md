@@ -1,21 +1,49 @@
 # Straw man: ChannelSeal MCP Server Index (MSI)
 
+*Proprietary and confidential. (c) 2026, All rights reserverd.*
+
 This document describes design of indexing MCP Server components in order to identify sensitive data flows from AI application traffic.
 
-First, let's get some background on technologies we would use.
+First, let's get some background on concepts/ technologies we would use.
 
 ## Background
 
-As AI applications gain mainstream adoption, the industry has invested heavily in model capabilities, achieving rapid advances in inferencing, reasoning and quality. However, even the most sophisticated models are constrained by their isolation from data—trapped behind information silos and legacy systems. Every new data source requires its own custom implementation, making truly connected systems difficult to scale.
+### Model Context Protocol (MCP)
 
-[Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro) addresses this challenge. It provides a universal, open standard for connecting AI systems with data sources, replacing fragmented integrations with a single protocol.
+As AI applications gain mainstream adoption, the industry has invested heavily in large langauge model (LLM) capabilities, achieving rapid advances in inferencing, reasoning and quality. However, even the most sophisticated models are constrained by their isolation from data—trapped behind information silos and legacy systems. Every new data source requires its own custom implementation, making truly connected systems difficult to scale. [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro) addresses this challenge. MCP provides a universal, open standard for connecting AI systems with data sources, replacing fragmented integrations with a single protocol.
+
+```mermaid
+    flowchart LR
+        C[Chat interface<br> Claude, Gemini, ChatGPT]<-->M[MCP<br>Standardized protocol]<-->D[Data and file systems<br>RDBMS, MongoDB, etc.]
+        I[IDEs and code editors<br>Claud Code, Intellij, VSCode]<-->M<-->R[Development tools<br>Git, Sentry, etc.]
+        O[Enterprise AI applications<br>Workflows, Business Processes, Portals]<-->M<-->S[Cloud/ SaaS APIs<br>Salesforce, Mastercard, Twilio, LexisNexis]
+```
 
 ### MCP Architecture
 
 The key participants in the MCP architecture are:
+
 1. MCP Host: The AI application that coordinates and manages one or multiple MCP clients
 2. MCP Client: A component that maintains a connection to an MCP server and obtains context from an MCP server for the MCP host to use
 3. MCP Server: A program that provides context to MCP clients
+
+```mermaid
+flowchart LR
+    User([👤 User]) --> Host
+
+    subgraph Host["MCP Host"]
+    LLM[🧠 LLM]
+    Client[MCP Client]
+    LLM <--> Client
+    end
+    
+    Client <-->Server["⚙️ MCP Server"]
+    
+    style Host fill:#dbeafe,stroke:#3b82f6
+    style Server fill:#dcfce7,stroke:#16a34a
+```
+
+For the context of this document, we would focus on MCP Server.
 
 #### MCP Server
 
@@ -25,7 +53,67 @@ MCP servers are programs that expose specific capabilities to AI applications th
 2. Resources: Passive data sources that provide read-only access to information for context, such as file contents, database schemas, or API documentation.
 3. Prompts: Pre-built instruction templates that tell the model to work with specific tools and resources.
 
-MCP distinguishes tools (for actions like `POST`/`PUT`/`DELETE`, often with side effects) from resources (read-only data retrieval, typically `GET` for context like lists or queries).
+
+```mermaid
+flowchart LR
+    User([👤 User]) --> Host
+    
+    subgraph Host["MCP Host"]
+    LLM[🧠 LLM]
+    Client[MCP Client]
+    LLM <--> Client
+    end
+    
+    Client <-->|JSON-RPC 2.0| Server
+    
+    subgraph Server["⚙️ MCP Server"]
+    Tools[🔧 Tools]
+    Resources[📁 Resources]
+    Prompts[💬 Prompts]
+    end
+    
+    Server --> DB[(Database)]
+    Server --> API[🌐 API]
+    Server --> FS[📂 Files]
+    
+    style Host fill:#dbeafe,stroke:#3b82f6
+    style Server fill:#dcfce7,stroke:#16a34a
+```
+
+For the context of this document, we would focus on Resources and Tools.
+
+##### MCP Resource
+
+MCP provides a standardized way for servers to expose resources to clients. Resources allow servers to share data that provides context to language models, such as files, database schemas, or application-specific information.
+
+An MCP [resource definition]() includes the following:
+
+* `uri`: Unique identifier for the resource
+* `name`: The name of the resource.
+* `title`: Optional human-readable name of the resource for display purposes.
+* `description`: Optional description
+* `icons`: Optional array of icons for display in user interfaces
+* `mimeType`: Optional MIME type
+* `size`: Optional size in bytes
+
+**Example**
+
+```json
+{
+    "uri": "file:///project/src/main.rs",
+    "name": "main.rs",
+    "title": "Rust Software Application Main File",
+    "description": "Primary application entry point",
+    "mimeType": "text/x-rust",
+    "icons": [
+      {
+        "src": "https://example.com/rust-file-icon.png",
+        "mimeType": "image/png",
+        "sizes": ["48x48"]
+      }
+    ]
+}
+```
 
 ##### MCP Tools
 
@@ -79,46 +167,11 @@ Each tool is uniquely identified by a name and includes [metadata](https://model
 }
 ```
 
-##### MCP Resource
+#### MCP Server, A Shim For API
 
-MCP provides a standardized way for servers to expose resources to clients. Resources allow servers to share data that provides context to language models, such as files, database schemas, or application-specific information.
+Enterprises have invested 15+ years into exposing enterprise capabilities (internal and external) with APIs. MCP, as exciting as it is, is really just a simple protocol `shim` for AI models to call tools. It is expected that most enterprises would expose their existing HTTP APIs as MCP tools to leverage this investment.
 
-An MCP [resource definition]() includes the following:
-
-* `uri`: Unique identifier for the resource
-* `name`: The name of the resource.
-* `title`: Optional human-readable name of the resource for display purposes.
-* `description`: Optional description
-* `icons`: Optional array of icons for display in user interfaces
-* `mimeType`: Optional MIME type
-* `size`: Optional size in bytes
-
-**Example**
-
-```json
-{
-    "uri": "file:///project/src/main.rs",
-    "name": "main.rs",
-    "title": "Rust Software Application Main File",
-    "description": "Primary application entry point",
-    "mimeType": "text/x-rust",
-    "icons": [
-      {
-        "src": "https://example.com/rust-file-icon.png",
-        "mimeType": "image/png",
-        "sizes": ["48x48"]
-      }
-    ]
-}
-```
-
-#### MCP Servers from APIs
-
-Enterprises have invested 15+ years into exposing enterprise capabilities (internal and external) with APIs. MCP, as exciting as it is, is really just a simple protocol `shim` for AI models to call tools. It is expected that enterprises would expose their existing APIs as MCP tools to leverage this investment.
-
-Number of libraries, API design tools, API gateways, etc. are providing tools to generate MCP server from an API specification described in the OpenAPI format. 
-
-##### OpenAPI Operation As MCP Tool
+##### OpenAPI Operation Mapped To MCP Tool
 
 Following table as described in [Exposing OpenAPI as MCP Tools - Semantics Matter](https://blog.christianposta.com/semantics-matter-exposing-openapi-as-mcp-tools/) provides practical mapping between OpenAPI attributes in MCP tool attributes.
 
@@ -131,7 +184,21 @@ Following table as described in [Exposing OpenAPI as MCP Tools - Semantics Matte
 | Invocation Details   | 	servers, path, method	               | URL, HTTP verb, server base
 | Security             | 	security, components.securitySchemes |	Auth context for protected endpoints
 
-Check out [Petstore MCP Server](./petstore_mcp.json) generated by Claude from [Petstore OpenAPI document](https://petstore3.swagger.io/api/v3/openapi.json).
+Number of libraries, API design tools, API gateways, etc. are providing tools to generate MCP server from an API specification described in the OpenAPI format.
+
+Check out this [Petstore MCP Server](./petstore_mcp.json) generated by Claude from [Petstore OpenAPI document](https://petstore3.swagger.io/api/v3/openapi.json).
+
+MCP distinguishes tools (for actions like `POST`/`PUT`/`DELETE`, often with side effects) from resources (read-only data retrieval, typically `GET` for context like lists or queries).
+
+### Search Index
+
+Web search indexing is the process by which a search engine analyzes web pages and stores their information in a structured database (the “index”) so that results can be retrieved quickly when you run a query. Main steps involved
+* Crawling: Automated programs (crawlers or spiders) discover pages by following links and sitemaps, downloading their content (HTML, images, etc.).
+* Processing the content: The search engine parses the page, extracts text, links, titles, meta tags, alt text, and other key attributes, and may render the page to understand its structure.
+* Analyzing and deduplicating: It determines what the page is about (keywords, topics), detects duplicates or near-duplicates, and chooses a canonical version to represent a cluster of similar pages.
+* Storing in the index: The processed information is stored in large, specialized data structures (for example, inverted indexes that map words to the pages where they appear), optimized for very fast lookup.
+* Continuous updating: The index is refreshed as pages are added, changed, or removed, so search results stay current and relevant.
+
 
 ### MCP Server Discovery
 
@@ -158,18 +225,107 @@ Find more details on  [MCP Server Card - SEP-2127](https://github.com/modelconte
 
 ## MCP Server Indexing
 
-MCP Server indexing is the process by which ChannelSeal would analyze MCP servers for sensitive data usage and store that information in a structured database (the “index”) so that it can be retrieved quickly while processing AI traffic metadata without needing to inspect the payload.
+### Rationale
+
+MCP Server indexing is the process by which ChannelSeal would analyze MCP servers for sensitive data usage and store that information in a structured database (the “index”) so that it can be retrieved quickly while processing MCP traffic metadata without needing to inspect any payload.
+
+To understand the approach, let's look at typical enterprise AI architecture and typical telemetry traffic involving MCP.
+
+#### Enterprise AI Architecture
+
+Typical enterprise AI architecture would be as following where enterprises would use agent gateway (e.g. [agentgateway](https://agentgateway.dev/)) for the following among other reasons.
+
+* Security and access control: provides RBAC, JWT authentication, TLS, and CEL-based access policies GitHub purpose-built for agent workloads
+* LLM provider portability: provides a unified OpenAI-compatible API across providers, enabling users to seamlessly switch between providers without changing application code — even dynamically based on the health or performance of a specific provider.
+* LLM cost and rate limiting: performs rate limiting based on requests or tokens, with fully configurable time windows, applied at the level of individual clients, users, teams, environments, or models
+* Observability: provides full OTel-based distributed tracing (spans for initialize, list_tools, call_tool), metrics, and structured access logs — all correlated by trace ID, with dynamic CEL-based span enrichment like jwt.sub, mcp.tool, and request.path.
+* Governance
+
+```mermaid
+flowchart LR
+    User([👤 User]) --> Host
+    subgraph Host["MCP Host (AI Application)"]
+        Client[MCP Client]
+        LLM <--> Client
+    end
+    Client <--> MCPRouter
+    subgraph MCPGateway["🔀 Agent Gateway"]
+        LLMR[LLM Router]
+        Memory[Context & Memory Store]
+        LLMR <--> Memory
+        MCPRouter[MCP Router & Multiplexer]
+        MCPAuth[MCP AuthN/AuthZ]
+        MCPRouter --> MCPAuth
+        MCPRouter <--Data Flows--> MCPSUpstream[MCP Server Upstream]
+        MCPRouter --Metadata (trace, log)--> MCPObs[OTel Telemetry]
+    end
+    LLM[🧠 LLM]<-->LLMR
+    MCPSUpstream --Data flows-->Server["⚙️ MCP Server <br>example-mcp.com"]
+    MCPObs --Metadata (trace, log)--> Observability["📊 Observability"]
+    LLMR --> LLMProviders["☁️ LLM " <br> GPT, Claude, Gemini,... ]
+
+    style Host fill:#dbeafe,stroke:#3b82f6
+    style Server fill:#dcfce7,stroke:#16a34a
+```
+
+#### MCP Telemetry (Tool Call)
+
+Following is an example of OpenTelemetry (OTel) Trace record as generated by an agent gateway or MCP client. As you can see that it would only contain metadata for the tool (or resource) calls (see key names with prefix: `mcp`, `http` and `url`).
+
+```json
+           {
+              "traceId":      "286cb6c44380a45e1f77f29ce4d146fd",
+              "spanId":       "ccddee1122334455",
+              "parentSpanId": "aabbccddeeff0011",
+              "name": "call_tool",
+              "kind": 2,
+              "startTimeUnixNano": "1740067205000000000",
+              "endTimeUnixNano":   "1740067205042000000",
+              "attributes": [
+                { "key": "protocol",                           "value": { "stringValue": "mcp" } },
+                { "key": "mcp.method",                         "value": { "stringValue": "tools/call" } },
+                { "key": "mcp.tool",                           "value": { "stringValue": "echo" } },
+                { "key": "mcp.server",                         "value": { "stringValue": "everything" } },
+                { "key": "mcp.session_id",                     "value": { "stringValue": "6b497ee9-3710-428a-96d2-31ebeab73dcd" } },
+
+                { "key": "http.request.method",                "value": { "stringValue": "POST" } },
+                { "key": "http.route",                         "value": { "stringValue": "/mcp" } },
+                { "key": "url.full",                           "value": { "stringValue": "http://example-mcp.com/mcp" } },
+                { "key": "url.path",                           "value": { "stringValue": "/mcp" } },
+                { "key": "url.scheme",                         "value": { "stringValue": "http" } },
+                { "key": "http.response.status_code",          "value": { "intValue": "200" } },
+                { "key": "http.request.body.size",             "value": { "intValue": "128" } },
+                { "key": "http.response.body.size",            "value": { "intValue": "96" } },
+                { "key": "http.request.header.content-type",   "value": { "arrayValue": { "values": [{ "stringValue": "application/json" }] } } },
+                { "key": "http.request.header.accept",         "value": { "arrayValue": { "values": [{ "stringValue": "application/json, text/event-stream" }] } } },
+                { "key": "http.request.header.mcp-session-id", "value": { "arrayValue": { "values": [{ "stringValue": "6b497ee9-3710-428a-96d2-31ebeab73dcd" }] } } },
+                { "key": "http.request.header.authorization",  "value": { "arrayValue": { "values": [{ "stringValue": "Bearer eyJhbGci..." }] } } },
+                { "key": "http.response.header.content-type",  "value": { "arrayValue": { "values": [{ "stringValue": "application/json" }] } } },
+                { "key": "network.protocol.version",           "value": { "stringValue": "1.1" } },
+                { "key": "network.peer.address",               "value": { "stringValue": "192.168.1.42" } },
+                { "key": "network.peer.port",                  "value": { "intValue": "52341" } },
+                { "key": "server.address",                     "value": { "stringValue": "gateway-node-1" } },
+                { "key": "server.port",                        "value": { "intValue": "3000" } },
+                { "key": "user_agent.original",                "value": { "stringValue": "mcp-client/1.0 (claude-desktop)" } },
+                { "key": "client.address",                     "value": { "stringValue": "192.168.1.42" } },
+
+                { "key": "environment",                        "value": { "stringValue": "production" } },
+                { "key": "route",                              "value": { "stringValue": "/mcp" } }
+              ],
+              "status": { "code": 1 }
+            }
+```
+In order to find sensitive data flow in communication between the MCP client and MCP server with or without an intermediary like agentgateway without peeking into the payload, ChannelSeal could rely on telemetry data and correlate the MCP traffic with its MCP Server Index. Following sections describe how we would build the index and use it for detecting sensitive data.
+
+### MCP Server Index Architecture
 
 Following are the main steps involved in MCP Server Indexing.
 
-* Crawling
-* Processing the content
-* Analyzing
-* Storing in the index
-* Continuous updating
-
-### Rationale
-
+* Crawling for MCP Servers over web and MCP Server Registries with a spider
+* Processing the MCP server metadata
+* Analyzing the MCP server metadata to identify sensitive data types
+* Storing senstive data elements, tools and resources for the MCP server in MCP Server Index
+* Continuous updating of MCP Server Index by following the above steps
 
 ### Indexing MCP Tools
 
@@ -181,7 +337,6 @@ MSI would use the following attributes from an MCP tool in order to identify cha
 
 ##### Does MCP Resource need to be indexed?
 
-
 Many popular OpenAPI->MCP conversion tools semantically map operations as following:
 * Actions (non-GET, or configurable GETs with params) become tools for AI invocation.
 * Simple GETs default to resources for passive data access.
@@ -191,14 +346,13 @@ However, according to Claude:
 Most real-world OpenAPI → MCP converters (awslabs.openapi-mcp-server, openapi-mcp-generator, Stainless, Higress) only generate tools, not resources. The dominant pattern treats every API endpoint as a tool, since MCP clients universally support tools but resource support varies widely. Stainless Resources are the right semantic fit for stable, addressable, read-only content — but in practice, the ecosystem has converged on tools-only for maximum compatibility.
 
 
+### Building ChannelSeal MCP Server Index 
 
-### Populating ChannelSeal MCP Server Index 
-
-### Using MCP Spider
+#### Use MCP Server Spider
 
 ```mermaid
 ---
-title: Preparing Index
+title: Crawl for MCP Servers
 ---
 sequenceDiagram
 
@@ -228,6 +382,7 @@ CMC->>CMRC: Update with SDEs
 
 #### Ad-hoc
 
+Add MCP server into the index on an ad-hoc basis.
 
 ```mermaid
 ---
@@ -259,11 +414,13 @@ CMC->>CMRC: Update with SDEs
 ```
 
 
-### Using MCP Server Index For Sensitive Data Detection in AI Traffic
+### Using MCP Server Index
+
+Use case: Sensitive Data Detection in MCP Traffic
 
 ```mermaid
 ---
-title: AI Traffic Log
+title: MCP Traffic Log
 ---
 flowchart LR
     style A fill:lightgray
