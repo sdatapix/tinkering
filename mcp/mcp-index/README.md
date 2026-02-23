@@ -134,7 +134,7 @@ Each tool is uniquely identified by a name and includes [metadata](https://model
 **Example**
 
 ```json
-{
+    {
   "name": "verifyIdentity",
   "title": "Verify Applicant Identity",
   "description": "Submit applicant information to receive identity verification results, aggregated risk scores, actionable data attributes, government watchlist hits, device risk signals, and eCBSV SSN validation status. Requires at minimum: first_name, last_name, date_of_birth, and address.",
@@ -158,11 +158,21 @@ Each tool is uniquely identified by a name and includes [metadata](https://model
         "type": "object",
         "description": "Applicant's residential address",
         "properties": {
-          "street":      { "type": "string" },
-          "city":        { "type": "string" },
-          "state":       { "type": "string" },
-          "postal_code": { "type": "string" },
-          "country":     { "type": "string" }
+          "street": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "postal_code": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          }
         }
       },
       "ssn": {
@@ -184,7 +194,113 @@ Each tool is uniquely identified by a name and includes [metadata](https://model
         "description": "Applicant's IP address for device risk assessment"
       }
     },
-    "required": ["first_name", "last_name", "date_of_birth", "address"]
+    "required": [
+      "first_name",
+      "last_name",
+      "date_of_birth",
+      "address"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "verification_status": {
+        "type": "string",
+        "enum": [
+          "verified",
+          "not_verified",
+          "review"
+        ],
+        "description": "Overall verification outcome"
+      },
+      "risk_score": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 100,
+        "description": "Aggregated risk score. 0 = low risk, 100 = high risk."
+      },
+      "actionable_attributes": {
+        "type": "array",
+        "description": "List of actionable data attributes returned by the verification engine.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "description": "Attribute code (e.g. ADDR_MATCH, EMAIL_VALID)"
+            },
+            "message": {
+              "type": "string",
+              "description": "Human-readable description of the attribute"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ]
+        }
+      },
+      "watchlist_hits": {
+        "type": "array",
+        "description": "Government or regulatory watchlist matches. Empty array if none.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "list_name": {
+              "type": "string",
+              "description": "Name of the watchlist that produced the match"
+            },
+            "match_detail": {
+              "type": "string",
+              "description": "Detail about the nature of the match"
+            }
+          },
+          "required": [
+            "list_name",
+            "match_detail"
+          ]
+        }
+      },
+      "device_risk": {
+        "type": "object",
+        "description": "Device risk assessment. Present when ip_address was supplied in the request.",
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "description": "Unique identifier assigned to the device"
+          },
+          "risk_level": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "description": "Device risk level"
+          }
+        },
+        "required": [
+          "device_id",
+          "risk_level"
+        ]
+      },
+      "eCBSV_status": {
+        "type": "string",
+        "enum": [
+          "match",
+          "no_match",
+          "deceased",
+          "error"
+        ],
+        "description": "eCBSV (SSA) SSN verification result. Present when ssn was supplied."
+      }
+    },
+    "required": [
+      "verification_status",
+      "risk_score",
+      "actionable_attributes",
+      "watchlist_hits"
+    ]
   }
 }
 ```
@@ -368,11 +484,21 @@ Following is an SEP-1649 compliant server card (to be updated once SEP 2127 is m
             "type": "object",
             "description": "Applicant's residential address",
             "properties": {
-              "street":      { "type": "string" },
-              "city":        { "type": "string" },
-              "state":       { "type": "string" },
-              "postal_code": { "type": "string" },
-              "country":     { "type": "string" }
+              "street": {
+                "type": "string"
+              },
+              "city": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "postal_code": {
+                "type": "string"
+              },
+              "country": {
+                "type": "string"
+              }
             }
           },
           "ssn": {
@@ -394,14 +520,115 @@ Following is an SEP-1649 compliant server card (to be updated once SEP 2127 is m
             "description": "Applicant's IP address for device risk assessment"
           }
         },
-        "required": ["first_name", "last_name", "date_of_birth", "address"]
+        "required": [
+          "first_name",
+          "last_name",
+          "date_of_birth",
+          "address"
+        ]
       },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "verification_status": {
+            "type": "string",
+            "enum": [
+              "verified",
+              "not_verified",
+              "review"
+            ],
+            "description": "Overall verification outcome"
+          },
+          "risk_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Aggregated risk score. 0 = low risk, 100 = high risk."
+          },
+          "actionable_attributes": {
+            "type": "array",
+            "description": "List of actionable data attributes returned by the verification engine.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "description": "Attribute code (e.g. ADDR_MATCH, EMAIL_VALID)"
+                },
+                "message": {
+                  "type": "string",
+                  "description": "Human-readable description of the attribute"
+                }
+              },
+              "required": [
+                "code",
+                "message"
+              ]
+            }
+          },
+          "watchlist_hits": {
+            "type": "array",
+            "description": "Government or regulatory watchlist matches. Empty array if none.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "list_name": {
+                  "type": "string",
+                  "description": "Name of the watchlist that produced the match"
+                },
+                "match_detail": {
+                  "type": "string",
+                  "description": "Detail about the nature of the match"
+                }
+              },
+              "required": [
+                "list_name",
+                "match_detail"
+              ]
+            }
+          },
+          "device_risk": {
+            "type": "object",
+            "description": "Device risk assessment. Present when ip_address was supplied in the request.",
+            "properties": {
+              "device_id": {
+                "type": "string",
+                "description": "Unique identifier assigned to the device"
+              },
+              "risk_level": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ],
+                "description": "Device risk level"
+              }
+            },
+            "required": [
+              "device_id",
+              "risk_level"
+            ]
+          },
+          "eCBSV_status": {
+            "type": "string",
+            "enum": [
+              "match",
+              "no_match",
+              "deceased",
+              "error"
+            ],
+            "description": "eCBSV (SSA) SSN verification result. Present when ssn was supplied."
+          }
+        },
+        "required": [
+          "verification_status",
+          "risk_score",
+          "actionable_attributes",
+          "watchlist_hits"
+        ]
       }
-    }
+    } 
   ],
   "resources": [],
   "prompts": [],
