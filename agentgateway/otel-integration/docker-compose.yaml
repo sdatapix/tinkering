@@ -1,0 +1,66 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# agentgateway + OTel Collector — traces only
+#
+# Signal flow
+# ───────────
+#   agentgateway OTLP traces (gRPC)
+#     → otel-collector:4317 → debug exporter (stdout)
+#
+# To forward to a real backend, set OTEL_BACKEND_ENDPOINT in .env and
+# uncomment the otlp exporter in collector/otel-collector-config.yaml.
+# ─────────────────────────────────────────────────────────────────────────────
+
+networks:
+  observability:
+    driver: bridge
+
+services:
+
+  # ── agentgateway ─────────────────────────────────────────────────────────
+  agentgateway:
+    image: ghcr.io/agentgateway/agentgateway:latest
+    container_name: agentgateway
+    restart: unless-stopped
+    networks:
+      - observability
+    ports:
+      - "127.0.0.1:3000:3000"    # MCP / HTTP listener
+      - "127.0.0.1:15000:15000"  # Admin UI  →  http://127.0.0.1:15000/ui
+      - "127.0.0.1:15020:15020"  # Prometheus metrics
+    volumes:
+      - ./agentgateway/config.yaml:/etc/agentgateway/config.yaml:ro
+      - ./petstore_openapi.json:/etc/agentgateway/petstore_openapi.json:ro
+    command: ["-f", "/etc/agentgateway/config.yaml"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      otel-collector:
+        condition: service_healthy
+
+  # ── OTel Collector ────────────────────────────────────────────────────────
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.119.0
+    container_name: otel-collector
+    restart: unless-stopped
+    networks:
+      - observability
+    ports:
+      - "127.0.0.1:4317:4317"    # OTLP gRPC  ← agentgateway traces
+      - "127.0.0.1:4318:4318"    # OTLP HTTP
+      - "127.0.0.1:8888:8888"    # Collector self-metrics
+      - "127.0.0.1:13133:13133"  # Health check
+      - "127.0.0.1:55679:55679"  # zPages  →  http://127.0.0.1:55679/debug/tracez
+    volumes:
+      - ./collector/otel-collector-config.yaml:/etc/otel/config.yaml:ro
+    command: ["--config=/etc/otel/config.yaml"]
+    environment:
+      OTEL_BACKEND_ENDPOINT: ${OTEL_BACKEND_ENDPOINT:-}
+      DEPLOYMENT_ENVIRONMENT: ${DEPLOYMENT_ENVIRONMENT:-development}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:13133/"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s

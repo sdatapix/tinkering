@@ -1,0 +1,89 @@
+# yaml-language-server: $schema=https://agentgateway.dev/schema/config
+
+# Dynamic tracing via frontendPolicies.tracing — the only way to add custom
+# span attributes via CEL. `host` + `protocol` set the OTLP destination.
+# randomSampling must be a string ("1.0"), not a number.
+
+frontendPolicies:
+  tracing:
+    host: otel-collector:4317
+    protocol: grpc
+    # "1.0" = sample 100% of requests. Default is no sampling (no traces emitted).
+    randomSampling: "1.0"
+
+    resources:
+      service.name: '"agentgateway"'
+
+    attributes:
+      # ── MCP ────────────────────────────────────────────────────────────────
+      # Sourced from: agentgateway MCP observability docs + CEL variable table
+      mcp.method:        'default(mcp.tool.name, default(mcp.prompt.name, default(mcp.resource.name, "")))'
+      mcp.tool.name:     'default(mcp.tool.name, "")'
+      mcp.tool.target:   'default(mcp.tool.target, "")'
+      mcp.prompt.name:   'default(mcp.prompt.name, "")'
+      mcp.resource.name: 'default(mcp.resource.name, "")'
+      mcp.session.id:    'default(request.headers["mcp-session-id"], "")'
+
+      # ── HTTP request ───────────────────────────────────────────────────────
+      # Sourced from: CEL variable table (request.*)
+      http.request.method:        'request.method'
+      http.request.path:          'request.path'
+      http.request.uri:           'request.uri'
+      http.request.host:          'request.host'
+      http.request.scheme:        'request.scheme'
+      http.request.version:       'request.version'
+
+      # Request headers
+      http.request.user_agent:    'default(request.headers["user-agent"], "")'
+      http.request.content_type:  'default(request.headers["content-type"], "")'
+      http.request.forwarded_for: 'default(request.headers["x-forwarded-for"], "")'
+      http.request.trace_parent:  'default(request.headers["traceparent"], "")'
+      http.request.accept:        'default(request.headers["accept"], "")'
+      http.request.cache_control: 'default(request.headers["cache-control"], "")'
+
+      # Request timing
+      http.request.start_time:    'string(request.startTime)'
+      http.request.end_time:      'string(request.endTime)'
+
+      # ── HTTP response ──────────────────────────────────────────────────────
+      http.response.status_code:  'string(response.code)'
+      http.response.content_type: 'default(response.headers["content-type"], "")'
+
+      # ── Network ────────────────────────────────────────────────────────────
+      network.peer.address: 'source.address'
+      network.peer.port:    'string(source.port)'
+
+      # ── Backend ────────────────────────────────────────────────────────────
+      backend.name:     'backend.name'
+      backend.type:     'backend.type'
+      backend.protocol: 'backend.protocol'
+
+config:
+  adminAddr: 0.0.0.0:15000
+  tracing:
+    otlpEndpoint: http://0.0.0.0:4317
+    otlpProtocol: http
+    randomSampling: false
+
+binds:
+  - port: 3000
+    listeners:
+      - routes:
+          - policies:
+              cors:
+                allowOrigins: ["*"]
+                allowHeaders: ["*"]
+                exposeHeaders: ["Mcp-Session-Id"]
+            backends:
+              - mcp:
+                  targets:
+                    - name: petstore
+                      openapi:
+                        schema:
+                          file: /etc/agentgateway/petstore_openapi.json
+                        host: host.docker.internal:10080
+                    # - name: moderntreasury.com
+                    #   openapi:
+                    #     schema:
+                    #       url: https://raw.githubusercontent.com/Modern-Treasury/modern-treasury-openapi/refs/heads/main/openapi/mt_openapi_spec_v1.yaml
+                    #     host: app.moderntreasury.com

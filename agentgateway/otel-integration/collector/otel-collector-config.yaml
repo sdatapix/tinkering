@@ -1,0 +1,79 @@
+# OTel Collector — traces only
+#
+# Receives OTLP/gRPC traces from agentgateway → prints to stdout via debug
+# exporter so spans are immediately visible in `docker compose logs otel-collector`.
+#
+# To forward to a backend (Jaeger, Grafana, Honeycomb, etc.), set
+# OTEL_BACKEND_ENDPOINT in .env and add otlp/backend to the exporters list.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Drop if memory pressure is high
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+
+  # Attach host metadata to every span
+  resourcedetection:
+    detectors: [env, system]
+    timeout: 5s
+    override: false
+
+  # Stamp service identity on all spans
+  resource:
+    attributes:
+      - key: service.name
+        value: agentgateway
+        action: upsert
+      - key: deployment.environment
+        from_attribute: env.DEPLOYMENT_ENVIRONMENT
+        action: insert
+
+  # batch:
+  #   send_batch_size: 256
+  #   timeout: 2s
+
+exporters:
+  # ── Debug: print every span to stdout ────────────────────────────────────
+  # View with: docker compose logs -f otel-collector
+  # Change verbosity to `normal` or `basic` to reduce noise in production.
+  debug:
+    verbosity: detailed
+
+  # ── Optional: forward to a real backend ──────────────────────────────────
+  # Uncomment and set OTEL_BACKEND_ENDPOINT in .env to enable.
+  # otlp/backend:
+  #   endpoint: ${env:OTEL_BACKEND_ENDPOINT}
+  #   tls:
+  #     insecure: true
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  extensions: [health_check, zpages]
+
+  pipelines:
+    traces:
+      receivers:  [otlp]
+      processors: [memory_limiter, resourcedetection, resource] #, batch]
+      exporters:  [debug]
+      # Add otlp/backend to exporters list when ready to forward:
+      # exporters: [debug, otlp/backend]
+
+  telemetry:
+    logs:
+      level: info   # suppress collector's own info noise; errors still show
+    metrics:
+      address: 0.0.0.0:8888
