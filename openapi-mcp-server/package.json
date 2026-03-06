@@ -1,0 +1,12 @@
+{
+  "name": "my-api-mcp-server",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@ivotoby/openapi-mcp-server": "latest",
+    "@modelcontextprotocol/sdk": "latest"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "preferences": {
+    "coworkScheduledTasksEnabled": false,
+    "coworkWebSearchEnabled": true,
+    "sidebarMode": "chat"
+  },
+  "mcpServers": {
+    "channelseal": {
+      "command": "node",
+      "args": ["/<path-to>/server.js"],
+      "env": {
+        "API_BASE_URL":      "https://<env>.channelseal.com/platform",
+        "OPENAPI_SPEC":      "/<path-to>/platform-api-specs.yaml",
+        "OAUTH_TOKEN_URL":   "https://dev-channelseal.us.auth0.com/oauth/token",
+        "JWT_AUDIENCE":      "https://api.channelseal.com",
+        "OAUTH_CLIENT_ID":   "your client id",
+        "OAUTH_CLIENT_SECRET": "your client secret",
+        "NODE_TLS_REJECT_UNAUTHORIZED": "0" //<- only for dev environment
+      }
+    }
+  }
+}
