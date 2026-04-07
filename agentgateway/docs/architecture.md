@@ -1,0 +1,412 @@
+
+## agentgateway Architecture
+
+### High-Level Architecture
+
+agentgateway is an open-source, high-performance data plane written in Rust that provides connectivity, security, and observability for agentic AI systems, serving as a unified gateway for Agent-to-Agent (A2A) communication, Model Context Protocol (MCP), LLM Gateway services, and traditional HTTP/gRPC traffic.
+
+### Core Components
+
+agentgateway’s architecture is a control-plane/data-plane design: 
+* The control plane watches configuration and secrets, translates Kubernetes/Gateway resources into agentgateway-specific proxy config, and then pushes an xDS snapshot to the data plane, 
+* The data plane is the agentgateway proxy serving live traffic.
+
+## 1. Control Plane (Kubernetes Mode)
+
+The control plane includes a config watcher that watches for new Kubernetes Gateway API and agentgateway resources, a secret watcher that monitors secret stores, a translator that converts resources into gateway proxy configuration stored in xDS snapshots, and an xDS server that distributes configuration to gateway proxies.
+
+### Configuration Model
+
+The architecture uses a hierarchical configuration model.
+
+**Core Building Blocks:**
+
+agentgateway's core configuration consists of the following:
+
+* Listeners (entry points for incoming traffic on ports supporting HTTP, HTTPS, TCP, and TLS protocols)
+* Routes (rules that match incoming requests and forward them to backends based on path, hostname, headers, query parameters, and HTTP methods)
+* Backends (destination services that receive traffic, which can be static hosts, MCP servers, LLM providers, or other services).
+
+```mermaid
+flowchart TB
+    subgraph Config_Model[Config Model]
+        B[Bind: exposed port/address]
+        L[Listener: protocol + ingress behavior]
+        R[Route: match + forwarding rules]
+        PO[Policies: auth, headers, timeouts, retries, rewrites]
+        BE[Backend destination: destination service/provider]
+        B --> L --> R --> BE
+        PO --- L
+        PO --- R
+        PO --- BE
+    end
+
+```
+
+
+### Translation & Distribution
+
+The translation cycle starts by collecting Kubernetes, Gateway API, and `kgateway` resources defined in the cluster (such as namespaces, services, gateways, routes, policies, backends), then translates this core collection into agentgateway data plane resource format including bind, port, listener, route, backend, target, and policy configuration.
+
+```mermaid
+flowchart TB
+    subgraph Control_Plane[Control Plane]
+        W[Config + Secret Watchers]
+        T[Translation Engine]
+        X[xDS Snapshot Builder]
+        W --> T --> X
+    end
+
+    subgraph Data_Plane[Data Plane]
+        P[agentgateway Proxy]
+    end
+
+    subgraph Config_Model[Config Model]
+    end
+    X --> P
+    W -. watches .-> Config_Model
+
+```
+## 2. Data Plane (Rust Core)
+
+### Gateways
+
+agentgateway provides four specialized gateway types:
+* LLM Gateway for routing traffic to major LLM providers through a unified OpenAI-compatible API with budget controls and failover;
+* MCP Gateway for connecting LLMs to tools via MCP with tool federation and OAuth authentication;
+* A2A Gateway for secure agent-to-agent communication with capability discovery
+* Inference Routing for intelligent routing to self-hosted models using Kubernetes extensions.
+
+### Proxy
+
+The gateway core consists of two main proxy implementations: 
+
+* HTTPProxy which handles HTTP/1.1, HTTP/2, and HTTPS traffic with full request/response processing, policy enforcement, and protocol-specific routing
+* TCPProxy which handles raw TCP connections for non-HTTP protocols like TLS passthrough.
+
+### Modular Architecture of Gateway
+
+
+* Binds define the network entry points, such as ports that the proxy should listen on.
+* Listeners sit on top of binds and define protocol-aware ingress handling for HTTP, HTTPS, TCP, and TLS traffic.
+* Routes live inside listeners and decide how requests are matched and forwarded using hostnames, paths, headers, query parameters, and methods.
+* Backends are the destinations, including static hosts, MCP servers, LLM providers, or other services.
+
+The model including Bind, Listener, Route, Backend, and Target, provides modular architecture allowing each component (gateway, policy enforcement) to operate independently while sharing common configuration and telemetry foundation.
+
+### Request Processing
+```mermaid
+flowchart LR
+  Clients[Clients / Agents / IDEs / Apps] --> B
+  Target[Targets: MCP servers, LLMs, Services]
+
+  subgraph Proxy[agentgateway proxy]
+      B[Bind]
+      L[Listener]
+      R[Route]
+      PO[Policies]
+      BE[Backend Destination]
+      B --> L --> R --> BE
+      PO --- L
+      PO --- R
+      PO --- BE
+  end
+  BE -->|uses config to decide| Target
+```
+
+A request enters through a bind and listener, gets matched to a route, has listener/route policies applied, and is then forwarded to a backend where backend-specific policies can run. In practice, this makes agentgateway a declarative traffic control plane for agent and model traffic rather than just a simple proxy.
+
+#### Example shape
+A typical config looks like this: one bind on port 3000, one listener with an API-key policy, one route with a transformation policy, and one backend with backend auth.
+
+## Policy Architecture
+
+### Three-Phase Policy Model
+
+Policies in agentgateway control request and response processing at three distinct phases: 
+* Frontend Policies applied at the connection/listener level controlling TLS, TCP, HTTP protocol settings, logging, and tracing; 
+* Traffic Policies applied at the route level controlling authentication, authorization, rate limiting, CORS, transformations, and routing decisions; and 
+* Backend Policies applied at the backend level controlling backend authentication, TLS, protocol-specific handling (LLM, MCP, A2A), and backend transformations.
+
+### Policy Categories
+
+Policies are grouped into functional categories, with each category mapping to one or more configuration fields and a corresponding Rust module in the data plane, supporting modes like 
+* Strict (token required)
+* Optional (validate if present)
+* Permissive (never reject).
+
+### Listener policies
+Listener policies apply at the ingress entry point, so they are good for things that should affect all traffic accepted by that listener. Examples include:
+* TLS enforcement, requiring encrypted transport before any request is processed.
+* Certificate selection, choosing the cert for the inbound TLS connection.
+* Global auth or request constraints, such as requiring an API key for every request on that listener.
+
+### Route policies
+Route policies apply after a request matches a listener route, so they are useful for behavior tied to a specific path, host, or request pattern. Examples include:
+* Header or query rewriting, to transform requests before forwarding.
+* Route-specific auth, allowing one route to require stronger checks than another.
+* Per-route retries or timeouts, so one backend path can be more tolerant than another.
+
+### Backend policies
+Backend policies apply at the destination, so they are best for requirements tied to a particular upstream service or model provider. Examples include:
+* Backend authentication, such as adding credentials needed to talk to OpenAI, Anthropic, or an MCP server.
+* Health checks / reachability controls, so the gateway knows whether a backend is usable.
+* Provider-specific connection settings, such as endpoint URL, transport, or secret-backed config.
+
+
+## Observability & Telemetry
+
+All telemetry is generated by the RequestLog system that tracks requests from arrival through completion, including token counts for LLM requests and session IDs for MCP interactions.
+
+## Security
+
+### Authentication
+
+#### Call MCP Server
+
+In agentgateway, authentication with a provider (MCP server) is modeled by having agentgateway act as a resource‑server‑style proxy: it enforces JWT‑based OAuth for the MCP route, validates tokens, and then forwards traffic to the MCP backend, optionally with its own backend‑auth credentials to the provider.
+
+```mermaid
+sequenceDiagram
+  participant C as Client/Agent
+  participant G as agentgateway
+  participant AS as Authorization Server
+  participant M as MCP Server
+
+  %% 1. Client tries to call MCP
+  C ->> G: POST /mcp initialize
+  G ->> C: 401 Unauthorized
+  Note right of G: WWW-Authenticate with resource metadata URL
+
+  %% 2. Client discovers metadata
+  C ->> G: GET /.well-known/oauth-protected-resource/mcp
+  G -->> C: MCP resource metadata (issuer, scopes, etc.)
+
+  %% 3. Client gets token from AS
+  C ->> AS: (OAuth2/OIDC flow) Get access token
+  AS -->> C: JWT access token
+
+  %% 4. Client retries with token
+  C ->> G: POST /mcp initialize Authorization Bearer JWT
+  G ->> G: Validate JWT (issuer, audience, scopes)
+  Note right of G: MCP authentication policy (strict)
+
+  %% 5. Forward to MCP backend
+  G ->> M: POST /mcp initialize Authorization Bearer JWT (or provider key)
+  Note right of G: Backend auth policy adds provider key if needed
+  M -->> G: MCP response
+  G -->> C: MCP response
+```
+
+
+
+MCP Authentication policy (listener/route)
+* Enforces `strict` / `optional` / `permissive` JWT validation on the MCP route.
+* On first request without a valid token, returns `401` with `WWW-Authenticate` pointing to the MCP Protected Resource Metadata URL (RFC‑9728‑style).
+* agentgateway as resource‑server proxy
+  * Validates the JWT using the configured issuer and JWKS before allowing the request to the MCP backend.
+  * Optionally enriches or transforms claims (e.g., adding headers) for downstream policy or tool‑filtering logic.
+* Backend authentication policy (to MCP)
+  * Can attach a provider‑specific token or API key when calling the MCP backend, so the MCP server still sees gateway‑authed credentials.
+  * This is independent of the client‑facing JWT; the gateway can present its own identity to the provider while still validating the client’s token.
+
+#### Call API
+
+For an API that supports client‑credential grant (machine‑to‑machine OAuth) and is exposed via agentgateway, the flow breaks into two parts:
+1.	Client → authorization server → client credentials grant to get a JWT.
+2.	Client → agentgateway → backend API, with agentgateway acting as the resource server that validates the JWT and may forward its own credentials to the backend.
+
+```mermaid
+sequenceDiagram
+  participant A as API Client (app)
+  participant AS as Authorization Server (JWT issuer)
+  participant G as agentgateway
+  participant B as Backend API (client‑credential‑protected)
+
+%% 1. Client gets token via client credentials grant
+  A ->> AS: POST /oauth2/token?client_id=xyz&client_secret=xxx&grant_type=client_credentials&scope=api:read
+AS -->> A: access_token=JWT
+
+%% 2. Client calls API through agentgateway
+A ->> G: GET /api/resources Authorization: Bearer <JWT>
+G ->> G: Validate JWT (issuer, audience, scopes)
+Note right of G: API authentication policy (mode: strict)
+
+%% 3. Optionally attach backend credentials
+G ->> B: GET /api/resources Authorization: Bearer <JWT> (or API key)
+Note right of G: Backend auth policy may inject provider key
+B -->> G: API response
+G -->> A: API response
+
+```
+* Client authenticates to the authorization server
+  * Uses `client_id` and `client_secret` to obtain a machine‑to‑machine access token via `client_credentials` grant.
+  * This is purely client → authorization server; agentgateway is not involved here.
+* Client authenticates to agentgateway
+  * Client sends the JWT in the `Authorization: Bearer` header to the agentgateway‑exposed endpoint.
+  * agentgateway:
+    * Validates the JWT (issuer, audience, scopes, expiry) using its configured `mcpAuthentication` or a generic `jwt` policy.
+   * Optionally rewrites or enriches the request before forwarding.
+* agentgateway authenticates to the backend
+  * agentgateway can either forward the same JWT (if the backend understands the same issuer) or inject a backend‑specific credential (e.g., API key, separate client‑credential‑style token) via a `backendAuth`‑style policy.
+  * This lets you keep the client‑facing JWT separate from the backend‑facing credentials.
+  
+### Authorization
+
+```mermaid
+sequenceDiagram
+  participant C as Client/Agent
+  participant G as agentgateway
+  participant A as AuthZ Service (OPA/OpenFGA/SpiceDB)
+  participant B as Backend/API/MCP
+
+  C ->> G: Request + identity/context
+  G ->> A: Authorization query
+  A -->> G: Allow / Deny
+  alt allowed
+    G ->> B: Forward request
+    B -->> G: Response
+    G -->> C: Response
+  else denied
+    G -->> C: 403 Forbidden
+  end
+
+
+```
+
+#### OPA
+
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant G as agentgateway
+  participant O as OPA
+  participant B as Backend API
+
+  C ->> G: Request (e.g., POST /mcp)
+  G ->> O: ext_authz / HTTP request with context
+  alt OPA allows
+    O -->> G: 200 OK
+    G ->> B: Forward request
+    B -->> G: Response
+    G -->> C: Response
+  else OPA denies
+    O -->> G: 403 Forbidden
+    G -->> C: 403 Forbidden
+  end
+
+```
+```yaml
+# yaml-language-server: $schema=https://agentgateway.dev/schema/config
+binds:
+- port: 3000
+
+listeners:
+- protocol: HTTP
+  policies:
+    extAuthz:
+      # OPA HTTP‑based external authz
+      http:
+        host: opa.opa-system.svc.cluster.local:8181   # your OPA service
+        path: /v1/data/agentgateway/authz/allow
+        timeout: 2s
+        # Include headers or CEL‑style metadata to pass context
+        meta
+          jwt: "{request.headers['Authorization']}"       # pass Bearer JWT
+          user: "{cel(expression('jwt.claims.sub'))}"      # example JWT field extraction
+          mcp_method: "{request.headers['Mcp-Method']}"    # MCP context header
+          # agentgateway JWT audience / issuer enrichment if present
+          # dev.agentgateway.jwt: '{\"claims\": jwt}'
+      # What to do on 2xx vs non‑2xx
+      allowOn:
+        statusCode:
+          range:
+            start: 200
+            end: 299
+      denyOn:
+        statusCode:
+          range:
+            start: 400
+            end: 599
+  routes:
+  - name: mcp-protected-route
+    matches:
+    - path:
+        pathPrefix: /mcp
+    policies:
+      # optional: override extAuthz at route level
+      extAuthz:
+        http:
+          host: opa.opa-system.svc.cluster.local:8181
+          path: /v1/data/agentgateway/mcp/allow
+          # more granular context for this route
+          meta
+            mcp_tool: "{request.body.tool}"
+            user: "{request.headers['X-User-ID']}"
+    backends:
+    - host: mcp.example.com:8080
+      # Backend auth policy if needed
+      policies:
+        backendAuth:
+          azure:
+            # or any other provider key / token
+            explicitConfig:
+              client_secret:
+                secretRef:
+                  name: backend-credentials-secret
+
+```
+**OPA Rego Policy**
+
+```
+package agentgateway.authz
+
+import future.keywords.if
+
+default allow := false
+
+allow if {
+    # Require valid Bearer token
+    valid_jwt
+
+    # Example RBAC: user.role == "admin" or "tool_runner"
+    role := jwt.claims.role
+    role in ["admin", "tool_runner"]
+}
+
+# You can also expose a separate package for MCP routes:
+package agentgateway.mcp
+
+default allow := false
+
+allow if {
+    # Based on MCP method, tool, user, etc.
+    mcp_method := input.mcp_method
+    mcp_tool := input.mcp_tool
+    user := input.user
+    # your business rules ...
+}
+
+```
+
+### Secrets Management
+
+In agentgateway, client ID and secret are stored in the backing secret store that the Gateway runs on, not in the agentgateway config file itself.
+
+**Kubernetes / Enterprise‑style setups**
+
+* In Kubernetes, the `client_id` and `client_secret` are typically stored in a Kubernetes `Secret`, and the gateway refers to it via a `secretRef` in the `BackendAuth` config (Azure, AWS, generic OAuth2‑style creds).
+* This keeps credentials out of the YAML config and lets you use Kubernetes RBAC, rotation, and encryption at rest.
+
+**Standalone / other environments**
+* In standalone or non‑Kubernetes deployments, the same pattern is followed but with the environment’s “secret store” (e.g., Vault‑style integration, environment variables, or a file‑based secret backend), and the gateway only references the secret by name or reference.
+* The actual client ID and secret are never written in the gateway config; they live in the external secret management layer, and the gateway just fetches them on startup / token refresh.
+
+
+## Project Structure
+
+The project architecture clearly separates concerns with core business logic in crates/agentgateway, underlying network protocols (like HBONE, xDS) abstracted into separate crates, and the user interface (ui/) completely decoupled from the backend (crates/), with examples providing use cases as a starting point.
+
+## Summary
+
+agentgateway is essentially a **policy-driven proxy** built from the ground up in Rust for AI agent workloads. It uses a hierarchical configuration model (binds → listeners → routes → backends) with a three-phase policy system, supports both standalone and Kubernetes deployment modes, and provides unified interfaces for LLM, MCP, and A2A protocols while maintaining traditional API gateway capabilities.
