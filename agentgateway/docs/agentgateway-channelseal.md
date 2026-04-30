@@ -37,7 +37,6 @@ The Linux Foundation accepted agentgateway in August 2025, with contributors fro
 
 ![img.png](images/channelseal_agentgateway.png)
 
-
 ### API Indexing Pipeline
 
 - Maintainer/ Provider verification for authenticity
